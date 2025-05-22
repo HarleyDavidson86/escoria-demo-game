@@ -32,7 +32,7 @@ func _reset_ui() -> void:
 	#Resetting other components
 	%IsInteractiveCheckBox.button_pressed = true
 	%InventoryPath.text = ProjectSettings.get_setting("escoria/ui/inventory_items_path")
-	%FileDialog.current_dir = ProjectSettings.get_setting("escoria/ui/inventory_items_path")
+	%InventoryPathFileDialog.current_dir = ProjectSettings.get_setting("escoria/ui/inventory_items_path")
 	%Preview.texture = null
 	#Resetting default actions
 	%DefaultActionOption.clear()
@@ -98,7 +98,7 @@ func _toggle_button_pressed(clicked_type: ItemType) -> void:
 	_setup_ui_to_itemtype(clicked_type)
 	
 # Loads the selected image texture and displays it in the preview
-func LoadObjectFileDialog_file_selected(path: String) -> void:
+func LoadImageFileDialog_file_selected(path: String) -> void:
 	image_stream_texture = load(path)
 	image_size = image_stream_texture.get_size()
 	%Preview.texture = image_stream_texture
@@ -125,12 +125,6 @@ func create_item() -> void:
 	var selected_index = %DefaultActionOption.selected
 	item.default_action = %DefaultActionOption.get_item_text(selected_index)
 
-	# Make the item by default it's usable straight out of the inventory
-	if current_item_type == ItemType.INVENTORY:
-		var new_pool_array: PackedStringArray = item.combine_when_selected_action_is_in
-		new_pool_array.append("use")
-		item.combine_when_selected_action_is_in = new_pool_array
-
 	# Add Dialog Position to the background item
 	var interact_position = ESCLocation.new()
 	interact_position.name = "ESCLocation"
@@ -153,16 +147,7 @@ func create_item() -> void:
 	item.add_child(item_sprite)
 
 	if current_item_type == ItemType.BACKGROUND:
-		# Create in scene tree
-		# Attach to currently selected node in scene tree
-		var current_node = EditorPlugin.new().get_editor_interface().get_selection().get_selected_nodes()[0]
-		current_node.add_child(item)
-		var owning_node = get_tree().edited_scene_root
-		item.set_owner(owning_node)
-		# Make it so all the nodes can be seen in the scene tree
-		collision_shape.set_owner(owning_node)
-		interact_position.set_owner(owning_node)
-		item_sprite.set_owner(owning_node)
+		place_new_item_in_scene_tree(item, collision_shape, interact_position, item_sprite)
 
 		%CreateCompleteDialog.dialog_text = \
 			"Background object %s created.\n\n" % item + \
@@ -171,14 +156,21 @@ func create_item() -> void:
 			"if you'd like to reuse this item."
 		print("Background object %s created." % item)
 		%CreateCompleteDialog.popup_centered()
-	else:
-		get_tree().edited_scene_root.add_child(item)
-		# Make it so all the nodes can be seen in the scene tree
-		collision_shape.set_owner(item)
-		interact_position.set_owner(item)
-		item_sprite.set_owner(item)
-
-		item.set_owner(get_tree().edited_scene_root)
+	
+	if current_item_type == ItemType.INVENTORY:
+		# Make the item by default it's usable straight out of the inventory
+		var new_pool_array: PackedStringArray = item.combine_when_selected_action_is_in
+		new_pool_array.append("use")
+		item.combine_when_selected_action_is_in = new_pool_array
+		
+		place_new_item_in_scene_tree(item, collision_shape, interact_position, item_sprite) 
+		#get_tree().edited_scene_root.add_child(item)
+		## Make it so all the nodes can be seen in the scene tree
+		#collision_shape.set_owner(item)
+		#interact_position.set_owner(item)
+		#item_sprite.set_owner(item)
+#
+		#item.set_owner(get_tree().edited_scene_root)
 		# Export scene - create in inventory folder
 		var packed_scene = PackedScene.new()
 
@@ -202,6 +194,18 @@ func create_item() -> void:
 			print("Inventory item %s/%s.tscn created." % [inventory_path, %ItemName.text])
 			%CreateCompleteDialog.popup_centered()
 
+# Create in scene tree
+# Attach to currently selected node in scene tree
+func place_new_item_in_scene_tree(item, collision_shape, interact_position, item_sprite) -> void:
+	var current_node = EditorPlugin.new().get_editor_interface().get_selection().get_selected_nodes()[0]
+	current_node.add_child(item)
+	var owning_node = get_tree().edited_scene_root
+	item.set_owner(owning_node)
+	# Make it so all the nodes can be seen in the scene tree
+	collision_shape.set_owner(owning_node)
+	interact_position.set_owner(owning_node)
+	item_sprite.set_owner(owning_node)
+
 ##### SIGNAL FUNCTIONS #############################
 
 func _on_BackgroundObjectCheckBox_toggled(button_pressed: bool) -> void:
@@ -214,7 +218,10 @@ func background_on_ItemName_text_changed(new_text: String) -> void:
 	%ItemGlobalID.text = new_text
 	
 func load_button_pressed() -> void:
-	%LoadObjectFileDialog.popup_centered()
+	%LoadImageFileDialog.current_dir = ""
+	if current_item_type == ItemType.INVENTORY:
+		%LoadImageFileDialog.current_dir = ProjectSettings.get_setting("escoria/ui/inventory_items_path")
+	%LoadImageFileDialog.popup_centered()
 	
 func Item_on_ClearButton_pressed() -> void:
 	main_menu_requested = false
@@ -236,9 +243,9 @@ func _on_ObjectConfirmationDialog_confirmed() -> void:
 		_reset_ui()
 		
 func _on_ChangePathButton_pressed():
-	%FileDialog.popup_centered()
+	%InventoryPathFileDialog.popup_centered()
 
-func _on_FileDialog_dir_selected(dir: String) -> void:
+func _on_InventoryPathFileDialog_dir_selected(dir: String) -> void:
 	ProjectSettings.set_setting("escoria/ui/inventory_items_path", dir)
 	var property_info = {
 		"name": "escoria/ui/inventory_items_path",
